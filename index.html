@@ -3,39 +3,76 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>The Great Escape - Satire Edition</title>
+    <title>The Great Escape - Pro Edition</title>
     <style>
-        body { margin: 0; padding: 0; overflow: hidden; background: #5cacee; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; touch-action: manipulation; }
-        #gameCanvas { max-width: 100%; max-height: 100vh; box-shadow: 0px 0px 50px rgba(0,0,0,0.6); background-color: #5cacee; border: 4px solid #333; }
-        #ui { position: absolute; top: 5%; width: 100%; color: white; text-align: center; user-select: none; pointer-events: none; text-shadow: 3px 3px 10px rgba(0,0,0,1); z-index: 20; }
-        #scoreLabel { font-size: 80px; margin: 0; font-weight: 900; }
-        #highScoreLabel { font-size: 20px; margin: 0; text-transform: uppercase; letter-spacing: 2px; opacity: 0.8;}
-        #message { font-size: 26px; margin-top: 10px; background: rgba(0,0,0,0.4); padding: 10px 20px; border-radius: 15px; }
-        #eventMessage { position: absolute; bottom: 20%; width: 100%; color: #ffeb3b; font-size: 32px; text-align: center; font-weight: bold; text-shadow: 2px 2px 4px #000; display: none; z-index: 10; }
+        body { 
+            margin: 0; padding: 0; overflow: hidden; background: #222; 
+            font-family: 'Arial Black', sans-serif; 
+            display: flex; justify-content: center; align-items: center; height: 100vh; 
+            touch-action: manipulation;
+        }
+
+        /* Fullscreen Desktop Logic */
+        #gameCanvas { 
+            background-color: #5cacee; 
+            border: 2px solid #000;
+            image-rendering: pixelated; /* Keeps it sharp */
+            height: 100vh; /* Scaled to screen height */
+            aspect-ratio: 9 / 16;
+        }
+
+        #ui { 
+            position: absolute; top: 5%; width: 100%; color: white; 
+            text-align: center; user-select: none; pointer-events: none; 
+            text-shadow: 3px 3px 10px rgba(0,0,0,1); z-index: 20; 
+        }
+
+        #scoreLabel { font-size: clamp(40px, 10vh, 80px); margin: 0; font-weight: 900; }
+        #highScoreLabel { font-size: 18px; margin: 0; text-transform: uppercase; opacity: 0.8; }
+        
+        /* Fixed the "Gray Line" by using a cleaner container */
+        #message { 
+            font-size: 24px; margin-top: 15px; 
+            padding: 10px; border-radius: 10px;
+            /* No background here unless text exists */
+        }
+
+        #eventMessage { 
+            position: absolute; bottom: 20%; width: 100%; color: #ffeb3b; 
+            font-size: 28px; text-align: center; font-weight: bold; 
+            text-shadow: 2px 2px 4px #000; z-index: 10;
+            display: none;
+        }
     </style>
 </head>
 <body>
     <canvas id="gameCanvas"></canvas>
     <div id="ui">
-        <p id="highScoreLabel">Best: 0</p>
+        <p id="highScoreLabel">Legjobb: 0</p>
         <h1 id="scoreLabel">0</h1>
-        <p id="message">Kattints a harchoz!</p>
+        <div id="message">Kattints vagy Szóköz!</div>
     </div>
     <div id="eventMessage">MI VAGYUNK A TISZA!</div>
 
 <script>
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
-    const ui = { score: document.getElementById('scoreLabel'), high: document.getElementById('highScoreLabel'), msg: document.getElementById('message'), event: document.getElementById('eventMessage') };
+    const ui = { 
+        score: document.getElementById('scoreLabel'), 
+        high: document.getElementById('highScoreLabel'), 
+        msg: document.getElementById('message'), 
+        event: document.getElementById('eventMessage') 
+    };
 
-    const CANVAS_WIDTH = 360, CANVAS_HEIGHT = 640;
-    const BIRD_SIZE = 55, HITBOX_PADDING = 15;
-    const GRAVITY = 0.45, FLAP_STRENGTH = -8;
-    const PIPE_WIDTH = 75, PIPE_SPEED = 3.5, PIPE_SPAWN_TIME = 1600;
+    // Virtual Resolution
+    const CW = 360, CH = 640;
+    canvas.width = CW; canvas.height = CH;
 
-    canvas.width = CANVAS_WIDTH; canvas.height = CANVAS_HEIGHT;
+    // --- Configuration ---
+    const BIRD_SIZE = 55, GRAVITY = 0.45, FLAP = -8;
+    const PIPE_W = 75, PIPE_SPEED = 3.5, PIPE_SPAWN_MS = 1700;
 
-    // --- Audio System ---
+    // --- Audio ---
     const sfx = {
         peter: new Audio('mi-vagyunk-magyar-peter.mp3'),
         lorinc: new Audio('hova-lett-a-penz.mp3'),
@@ -43,130 +80,134 @@
         war: new Audio('the-problem-is-the-war.mp3')
     };
 
-    function playSfx(clip) { clip.currentTime = 0; clip.play().catch(e => {}); }
+    function playSfx(clip) { clip.currentTime = 0; clip.play().catch(() => {}); }
+    function stopAllSfx() { Object.values(sfx).forEach(s => { s.pause(); s.currentTime = 0; }); }
 
     // --- Assets ---
     const assets = { ready: false, total: 3, loaded: 0, imgs: { avatar: new Image(), peter: new Image(), lorinc: new Image() } };
     function loadHandler() { assets.loaded++; if (assets.loaded === assets.total) assets.ready = true; }
-    assets.imgs.avatar.src = 'avatar.png'; assets.imgs.peter.src = 'peter.png'; assets.imgs.lorinc.src = 'lorinc.png';
+    assets.imgs.avatar.src = 'avatar.png'; 
+    assets.imgs.peter.src = 'peter.png'; 
+    assets.imgs.lorinc.src = 'lorinc.png';
     Object.values(assets.imgs).forEach(img => img.onload = loadHandler);
 
-    // --- Game Variables ---
-    let gameState = 'ready', score = 0, pipes = [], lastTime = 0, spawnTimer = 0;
-    let bird = { x: 80, y: CANVAS_HEIGHT / 2, velocity: 0, rotation: 0 };
+    // --- State ---
+    let state = 'ready', score = 0, pipes = [], lastTime = 0, spawnTimer = 0;
+    let bird = { x: 80, y: CH/2, v: 0, rot: 0 };
     let highScore = localStorage.getItem('orbanGameHighScore') || 0;
-    ui.high.innerText = `Best: ${highScore}`;
+    ui.high.innerText = `Legjobb: ${highScore}`;
 
-    let boss = { active: false, x: 500, y: 300, targetY: 300, timer: 0 };
-    let lorincObstacles = [];
+    let boss = { active: false, x: 500, y: 300 };
+    let lorincItems = [];
     let particles = [];
 
-    function handleAction(e) {
-        if (e) e.preventDefault(); 
+    // --- Inputs ---
+    function doAction() {
         if (!assets.ready) return;
-        if (gameState === 'ready') { gameState = 'playing'; resetGame(); }
-        else if (gameState === 'playing') { 
-            bird.velocity = FLAP_STRENGTH;
-            if (Math.random() < 0.05) playSfx(sfx.question);
+        if (state === 'ready') { state = 'playing'; resetGame(); }
+        else if (state === 'playing') { 
+            bird.v = FLAP; 
+            if (Math.random() < 0.04) playSfx(sfx.question);
         }
-        else if (gameState === 'gameOver') { gameState = 'ready'; resetGame(); ui.msg.innerText = 'Próbáld újra!'; }
+        else if (state === 'gameOver') { state = 'ready'; ui.msg.innerText = 'Kattints az új harchoz!'; }
     }
-    canvas.addEventListener('mousedown', handleAction);
-    canvas.addEventListener('touchstart', handleAction, { passive: false });
+
+    window.addEventListener('keydown', (e) => { if (e.code === 'Space') { e.preventDefault(); doAction(); } });
+    canvas.addEventListener('mousedown', (e) => { e.preventDefault(); doAction(); });
+    canvas.addEventListener('touchstart', (e) => { e.preventDefault(); doAction(); }, { passive: false });
 
     function resetGame() {
-        score = 0; pipes = []; lorincObstacles = []; particles = [];
-        bird.y = CANVAS_HEIGHT / 2; bird.velocity = 0;
-        boss.active = false; boss.x = 500; spawnTimer = 0;
-        ui.score.innerText = '0'; ui.msg.innerText = ''; ui.event.style.display = 'none';
-    }
-
-    function spawnLorinc() {
-        lorincObstacles.push({ x: CANVAS_WIDTH + 50, y: Math.random() * (CANVAS_HEIGHT - 100) + 50, collected: false });
-        playSfx(sfx.lorinc);
-    }
-
-    function createExplosion(x, y) {
-        for(let i=0; i<10; i++) particles.push({ x, y, vx: (Math.random()-0.5)*10, vy: (Math.random()-0.5)*10, life: 1.0 });
+        score = 0; pipes = []; lorincItems = []; particles = [];
+        bird.y = CH/2; bird.v = 0; boss.active = false; boss.x = 500;
+        ui.score.innerText = '0'; ui.msg.innerText = ''; ui.msg.style.background = 'none';
+        ui.event.style.display = 'none';
+        stopAllSfx();
     }
 
     function update(dt) {
-        if (!assets.ready || gameState !== 'playing') return;
+        if (!assets.ready || state !== 'playing') return;
 
-        bird.velocity += GRAVITY * dt;
-        bird.y += bird.velocity * dt;
-        bird.rotation = Math.min(Math.PI/4, Math.max(-Math.PI/4, bird.velocity * 0.1));
+        bird.v += GRAVITY * dt;
+        bird.y += bird.v * dt;
+        bird.rot = Math.min(Math.PI/4, Math.max(-Math.PI/4, bird.v * 0.1));
 
         spawnTimer += dt * 16.67;
-        if (spawnTimer >= PIPE_SPAWN_TIME) {
-            const gap = 200, topH = Math.floor(Math.random() * (CANVAS_HEIGHT - gap - 150)) + 50;
-            pipes.push({ x: CANVAS_WIDTH, topHeight: topH, bottomY: topH + gap, passed: false });
+        if (spawnTimer >= PIPE_SPAWN_MS) {
+            const gap = 210, topH = Math.floor(Math.random() * (CH - gap - 160)) + 60;
+            pipes.push({ x: CW, topH: topH, botY: topH + gap, passed: false });
             spawnTimer = 0;
         }
 
-        // BOSS FIGHT LOGIC (Magyar Péter)
+        // BOSS: Fixed trigger and persistent stalker
         if (score > 0 && score % 10 === 0 && !boss.active) {
-            boss.active = true; boss.x = CANVAS_WIDTH + 50; playSfx(sfx.peter);
-            ui.event.style.display = 'block'; setTimeout(()=> ui.event.style.display='none', 2000);
+            boss.active = true; boss.x = CW + 60; playSfx(sfx.peter);
+            ui.event.style.display = 'block'; setTimeout(() => ui.event.style.display = 'none', 2000);
         }
-
         if (boss.active) {
-            boss.x = Math.max(220, boss.x - 2 * dt); // Moves to the right side and stays
-            boss.y += (bird.y - boss.y) * 0.05 * dt; // He "follows" Orban's height to block him
-            if (Math.hypot(bird.x - boss.x, bird.y - boss.y) < 60) endGame();
-            if (score % 10 !== 0) boss.active = false; // Boss leaves after you score enough
+            boss.x = Math.max(CW - 100, boss.x - 1.5 * dt);
+            boss.y += (bird.y - boss.y) * 0.04 * dt;
+            if (Math.hypot(bird.x - boss.x, bird.y - boss.y) < 55) endGame();
+            if (score % 10 !== 0) boss.active = false; 
         }
 
-        // LŐRINC LOGIC (Bonus, not deadly)
-        if (Math.random() < 0.005) spawnLorinc();
-        for (let i = lorincObstacles.length - 1; i >= 0; i--) {
-            let o = lorincObstacles[i];
+        // LORINC: Frequency balanced (reduced spawn chance)
+        if (Math.random() < 0.003) { // Lowered from 0.005
+            lorincItems.push({ x: CW + 50, y: Math.random() * (CH - 150) + 75, done: false });
+            playSfx(sfx.lorinc);
+        }
+        lorincItems.forEach((o, i) => {
             o.x -= 4 * dt;
-            if (!o.collected && Math.hypot(bird.x - o.x, bird.y - o.y) < 50) {
-                o.collected = true; score += 5; ui.score.innerText = score;
-                createExplosion(o.x, o.y); // Funny money explosion
+            if (!o.done && Math.hypot(bird.x - o.x, bird.y - o.y) < 50) {
+                o.done = true; score += 5; ui.score.innerText = score;
+                for(let j=0; j<8; j++) particles.push({ x: o.x, y: o.y, vx: (Math.random()-0.5)*8, vy: (Math.random()-0.5)*8, l: 1 });
             }
-            if (o.x < -100 || o.collected) lorincObstacles.splice(i, 1);
-        }
-
-        // Particles update
-        particles.forEach((p, i) => { p.x += p.vx; p.y += p.vy; p.life -= 0.02; if(p.life <= 0) particles.splice(i,1); });
-
-        // Pipe Collision
-        pipes.forEach((p, i) => {
-            p.x -= PIPE_SPEED * dt;
-            if (bird.x + 40 > p.x && bird.x - 40 < p.x + PIPE_WIDTH) {
-                if (bird.y - 40 < p.topHeight || bird.y + 40 > p.bottomY) endGame();
-            }
-            if (!p.passed && p.x + PIPE_WIDTH < bird.x) { score++; ui.score.innerText = score; p.passed = true; }
-            if (p.x < -PIPE_WIDTH) pipes.splice(i, 1);
+            if (o.x < -60 || o.done) lorincItems.splice(i, 1);
         });
 
-        if (bird.y + BIRD_SIZE > CANVAS_HEIGHT || bird.y - BIRD_SIZE < 0) endGame();
+        particles.forEach((p, i) => { p.x += p.vx; p.y += p.vy; p.l -= 0.03; if(p.l <= 0) particles.splice(i,1); });
+
+        pipes.forEach((p, i) => {
+            p.x -= PIPE_SPEED * dt;
+            if (bird.x + 35 > p.x && bird.x - 35 < p.x + PIPE_W) {
+                if (bird.y - 35 < p.topH || bird.y + 35 > p.botY) endGame();
+            }
+            if (!p.passed && p.x + PIPE_W < bird.x) { score++; ui.score.innerText = score; p.passed = true; }
+            if (p.x < -PIPE_W) pipes.splice(i, 1);
+        });
+
+        if (bird.y + 30 > CH || bird.y - 30 < 0) endGame();
     }
 
     function draw() {
-        ctx.fillStyle = '#5cacee'; ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        ctx.fillStyle = '#5cacee'; ctx.fillRect(0, 0, CW, CH);
         pipes.forEach(p => {
-            ctx.fillStyle = '#ce2939'; ctx.fillRect(p.x, 0, PIPE_WIDTH, p.topHeight);
-            ctx.fillStyle = '#477050'; ctx.fillRect(p.x, p.bottomY, PIPE_WIDTH, CANVAS_HEIGHT - p.bottomY);
-            ctx.strokeStyle = '#fff'; ctx.strokeRect(p.x, 0, PIPE_WIDTH, p.topHeight); ctx.strokeRect(p.x, p.bottomY, PIPE_WIDTH, CANVAS_HEIGHT - p.bottomY);
+            ctx.fillStyle = '#ce2939'; ctx.fillRect(p.x, 0, PIPE_W, p.topH);
+            ctx.fillStyle = '#477050'; ctx.fillRect(p.x, p.botY, PIPE_W, CH - p.botY);
+            ctx.strokeStyle = '#fff'; ctx.strokeRect(p.x, 0, PIPE_W, p.topH); ctx.strokeRect(p.x, p.botY, PIPE_W, CH - p.botY);
         });
-        lorincObstacles.forEach(o => ctx.drawImage(assets.imgs.lorinc, o.x - 40, o.y - 40, 80, 80));
-        particles.forEach(p => { ctx.fillStyle = `rgba(255, 215, 0, ${p.life})`; ctx.fillText('€', p.x, p.y); });
+        lorincItems.forEach(o => ctx.drawImage(assets.imgs.lorinc, o.x - 40, o.y - 40, 80, 80));
+        particles.forEach(p => { ctx.fillStyle = `rgba(255,215,0,${p.l})`; ctx.fillText('€', p.x, p.y); });
         if (boss.active) ctx.drawImage(assets.imgs.peter, boss.x - 70, boss.y - 70, 140, 140);
-        ctx.save(); ctx.translate(bird.x, bird.y); ctx.rotate(bird.rotation);
+        ctx.save(); ctx.translate(bird.x, bird.y); ctx.rotate(bird.rot);
         if (assets.ready) ctx.drawImage(assets.imgs.avatar, -BIRD_SIZE, -BIRD_SIZE, BIRD_SIZE*2, BIRD_SIZE*2);
         ctx.restore();
     }
 
     function endGame() {
-        if (gameState === 'playing') playSfx(sfx.war);
-        gameState = 'gameOver';
-        if (score > highScore) { highScore = score; localStorage.setItem('orbanGameHighScore', highScore); ui.high.innerText = `Best: ${highScore}`; }
+        if (state === 'playing') { stopAllSfx(); playSfx(sfx.war); }
+        state = 'gameOver';
+        if (score > highScore) { highScore = score; localStorage.setItem('orbanGameHighScore', highScore); ui.high.innerText = `Legjobb: ${highScore}`; }
         ui.msg.innerText = 'BRÜSSZEL MEGÁLLÍTOTT!';
+        ui.msg.style.background = 'rgba(0,0,0,0.5)';
     }
-    function loop(ts) { let dt = (ts - lastTime) / 16.67; lastTime = ts; update(dt || 1); draw(); requestAnimationFrame(loop); }
+
+    function loop(ts) { 
+        let dt = (ts - lastTime) / 16.67; 
+        lastTime = ts; 
+        update(dt || 1); 
+        draw(); 
+        requestAnimationFrame(loop); 
+    }
     requestAnimationFrame(loop);
 </script>
 </body>

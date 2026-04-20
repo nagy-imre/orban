@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>The Great Escape - Propaganda Edition</title>
+    <title>The Great Escape - Propaganda Master</title>
     <style>
         body { 
             margin: 0; padding: 0; overflow: hidden; background: #1a1a1a; 
@@ -58,21 +58,22 @@
 
     // --- PROPAGANDA STRINGS ---
     const gameOverTexts = [
-        "BRÜSSZEL MEGÁLLÍTOTT!",
-        "POLOSKA PÉTER ELKAPOTT!",
-        "ELVETTÉK A REZSIUTALVÁNYT!",
-        "ELFOGYOTT A HATÓSÁGI ÁRAS FAR-HÁT!",
-        "SOROS GYÖRGY NEVET A VÉGÉN!",
-        "DOLLÁRBALOLDAL ÁLDOZATA LETTÉL!",
-        "MEGÉRKEZETT A GURULÓ DOLLÁR!"
+        "BRÜSSZEL MEGÁLLÍTOTT!", "POLOSKA PÉTER ELKAPOTT!", "ELVETTÉK A REZSIUTALVÁNYT!",
+        "ELFOGYOTT A HATÓSÁGI ÁRAS FAR-HÁT!", "SOROS GYÖRGY NEVET A VÉGÉN!",
+        "DOLLÁRBALOLDAL ÁLDOZATA LETTÉL!", "MEGÉRKEZETT A GURULÓ DOLLÁR!",
+        "STOP MIGRÁCIÓ, STOP JÁTÉK!", "BOLDOG KARÁCSONYT!"
     ];
 
     const shieldTexts = [
-        "MEGÉRKEZETT AZ UNIÓS PÉNZ!",
-        "BRÜSSZELI TÁMOGATÁS AKTIVÁLVA!",
-        "SOROS-TERV KICSELEZVE!",
-        "MEGVÉDTÜK A REZSIKÖLTSÉGEKET!",
-        "EXTRA PROFIT ADÓ BEHAJTVA!"
+        "MEGÉRKEZETT AZ UNIÓS PÉNZ!", "BRÜSSZELI TÁMOGATÁS AKTIVÁLVA!",
+        "SOROS-TERV KICSELEZVE!", "MEGVÉDTÜK A REZSIKÖLTSÉGEKET!",
+        "EXTRA PROFIT ADÓ BEHAJTVA!", "ÁLLÍTSUK MEG BRÜSSZELT!"
+    ];
+
+    const peterTexts = [
+        "POLOSKA PÉTER TÁMAD!", "TÓNIK, ÁDÁMOK, BARBARÁK!",
+        "MI VAGYUNK A TISZA!", "VISZIK A NÉPPÁRTBA!",
+        "VIGYÁZZ, NÁLA VAN A DIKTAFON!", "RENDSZERVÁLTÓ HANGULAT!"
     ];
 
     // --- AUDIO SYSTEM ---
@@ -81,12 +82,30 @@
         lorinc: new Audio('hova-lett-a-penz.mp3'),
         question: new Audio('isthereanyquestion.mp3'),
         war: new Audio('the-problem-is-the-war.mp3'),
-        money: new Audio('money.mp3')
+        money: new Audio('money.mp3'),
+        flaps: [new Audio('flap1.mp3'), new Audio('flap2.mp3'), new Audio('flap3.mp3')],
+        bgm: [new Audio('bg1.mp3'), new Audio('bg2.mp3')]
     };
 
-    function playSfx(clip) { clip.currentTime = 0; clip.play().catch(() => {}); }
-    function stopSfx(clip) { clip.pause(); clip.currentTime = 0; }
-    function stopAllSfx() { Object.values(sfx).forEach(s => { s.pause(); s.currentTime = 0; }); }
+    let currentBGM = null;
+
+    function playSfx(clip) {
+        const sound = clip.cloneNode();
+        sound.play().catch(() => {});
+    }
+
+    function playBGM() {
+        if (currentBGM) { currentBGM.pause(); currentBGM.currentTime = 0; }
+        currentBGM = sfx.bgm[Math.floor(Math.random() * sfx.bgm.length)];
+        currentBGM.loop = true;
+        currentBGM.volume = 0.4;
+        currentBGM.play().catch(() => {});
+    }
+
+    function stopAllSfx() {
+        if (currentBGM) currentBGM.pause();
+        sfx.peter.pause(); sfx.peter.currentTime = 0;
+    }
 
     // --- ASSET LOADING ---
     const assets = { ready: false, total: 4, loaded: 0, imgs: { avatar: new Image(), peter: new Image(), lorinc: new Image(), eu: new Image() } };
@@ -112,9 +131,10 @@
 
     function doAction() {
         if (!assets.ready) return;
-        if (state === 'ready') { state = 'playing'; resetGame(); }
+        if (state === 'ready') { state = 'playing'; resetGame(); playBGM(); }
         else if (state === 'playing') { 
             bird.v = FLAP; 
+            playSfx(sfx.flaps[Math.floor(Math.random() * sfx.flaps.length)]);
             if (Math.random() < 0.04) playSfx(sfx.question);
         }
         else if (state === 'gameOver') { state = 'ready'; ui.msg.innerText = 'Kattints az új harchoz!'; }
@@ -150,20 +170,18 @@
             else if (roll > 0.90) euItems.push({ x: CW + 50, y: Math.random() * (CH - 150) + 75, done: false });
         }
 
+        // BOSS SPAWN WITH RANDOM TEXT
         if (score > 0 && score % 20 === 0 && score !== boss.lastScore) {
             boss.lastScore = score;
             boss.active = true; boss.x = CW + 60; boss.y = bird.y;
-            playSfx(sfx.peter);
-            showEvent("POLOSKA PÉTER TÁMAD!", "#ffeb3b");
+            sfx.peter.play();
+            showEvent(peterTexts[Math.floor(Math.random() * peterTexts.length)], "#ffeb3b");
         }
         if (boss.active) {
             boss.x -= 4.5 * dt;
             boss.y += Math.sin(Date.now() / 150) * 3;
             if (bird.iFrames <= 0 && Math.hypot(bird.x - boss.x, bird.y - boss.y) < 60) triggerHit();
-            if (boss.x < -150) { 
-                boss.active = false; 
-                stopSfx(sfx.peter); // STOPS MUSIC WHEN OUT OF SCREEN
-            } 
+            if (boss.x < -150) { boss.active = false; sfx.peter.pause(); sfx.peter.currentTime = 0; } 
         }
 
         lorincItems.forEach((o, i) => {
@@ -180,7 +198,7 @@
             e.x -= PIPE_SPEED * dt;
             if (!e.done && Math.hypot(bird.x - e.x, bird.y - e.y) < 40) {
                 e.done = true; bird.shielded = true;
-                playSfx(sfx.money); // MONEY SOUND ON SHIELD
+                playSfx(sfx.money);
                 showEvent(shieldTexts[Math.floor(Math.random() * shieldTexts.length)], "#003399");
             }
             if (e.x < -60 || e.done) euItems.splice(i, 1);

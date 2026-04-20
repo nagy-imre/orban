@@ -3,48 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>The Great Escape</title>
+    <title>Orban Game</title>
     <style>
-        body {
-            margin: 0;
-            padding: 0;
-            overflow: hidden;
-            background: #70c5ce;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            touch-action: manipulation;
-        }
-
-        #gameCanvas {
-            max-width: 100%;
-            max-height: 100vh;
-            box-shadow: 0px 0px 50px rgba(0,0,0,0.4);
-            background-color: #70c5ce;
-        }
-
-        #ui {
-            position: absolute;
-            top: 5%;
-            width: 100%;
-            color: white;
-            text-align: center;
-            user-select: none;
-            pointer-events: none;
-            text-shadow: 2px 2px 8px rgba(0,0,0,0.8);
-        }
-
+        body { margin: 0; padding: 0; overflow: hidden; background: #70c5ce; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; touch-action: manipulation; }
+        #gameCanvas { max-width: 100%; max-height: 100vh; box-shadow: 0px 0px 50px rgba(0,0,0,0.4); background-color: #70c5ce; }
+        #ui { position: absolute; top: 5%; width: 100%; color: white; text-align: center; user-select: none; pointer-events: none; text-shadow: 2px 2px 8px rgba(0,0,0,0.8); }
         #scoreLabel { font-size: 80px; margin: 0; font-weight: 900; }
         #highScoreLabel { font-size: 20px; margin: 0; text-transform: uppercase; letter-spacing: 2px; }
         #message { font-size: 24px; margin-top: 10px; background: rgba(0,0,0,0.2); padding: 5px; border-radius: 10px; }
     </style>
 </head>
 <body>
-
     <canvas id="gameCanvas"></canvas>
-    
     <div id="ui">
         <p id="highScoreLabel">Best: 0</p>
         <h1 id="scoreLabel">0</h1>
@@ -58,56 +28,47 @@
     const highScoreLabel = document.getElementById('highScoreLabel');
     const message = document.getElementById('message');
 
-    // --- Configuration ---
+    // --- Configuration (Scaled for 60fps base) ---
     const CANVAS_WIDTH = 360;
     const CANVAS_HEIGHT = 640;
-    const BIRD_SIZE = 35; // Size of the avatar
+    
+    // ADJUSTED SIZE AS REQUESTED
+    const BIRD_SIZE = 55; // Larger Avatar
+    const HITBOX_PADDING = 15; // Makes the game more "fair"
+    
     const GRAVITY = 0.45;
     const FLAP_STRENGTH = -8;
-    const PIPE_WIDTH = 70;
-    const PIPE_GAP = 180;
+    const PIPE_WIDTH = 75;
+    const PIPE_GAP = 210; // Wider gap for the larger avatar
     const PIPE_SPEED = 3.5;
-    const PIPE_FREQUENCY = 90;
+    const PIPE_SPAWN_TIME = 1500; // Spawn pipe every 1500ms (1.5 seconds)
 
     canvas.width = CANVAS_WIDTH;
     canvas.height = CANVAS_HEIGHT;
 
-    // --- Assets ---
     const birdImg = new Image();
-    birdImg.src = 'avatar.png'; // Looking for your avatar.png
+    birdImg.src = 'avatar.png';
     let imgLoaded = false;
     birdImg.onload = () => { imgLoaded = true; };
 
-    // --- State & Storage ---
     let gameState = 'ready';
     let score = 0;
     let highScore = localStorage.getItem('orbanGameHighScore') || 0;
     let pipes = [];
-    let frameCount = 0;
+    
+    // --- Delta Time Logic Variables ---
+    let lastTime = 0;
+    let spawnTimer = 0;
 
     highScoreLabel.innerText = `Best: ${highScore}`;
 
-    let bird = {
-        x: 80,
-        y: CANVAS_HEIGHT / 2,
-        velocity: 0,
-        rotation: 0
-    };
+    let bird = { x: 80, y: CANVAS_HEIGHT / 2, velocity: 0, rotation: 0 };
 
-    // --- Input Handling ---
     function handleAction(e) {
         if (e) e.preventDefault(); 
-
-        if (gameState === 'ready') {
-            gameState = 'playing';
-            resetGame();
-        } else if (gameState === 'playing') {
-            bird.velocity = FLAP_STRENGTH;
-        } else if (gameState === 'gameOver') {
-            gameState = 'ready';
-            resetGame();
-            message.innerText = 'Tap to Start';
-        }
+        if (gameState === 'ready') { gameState = 'playing'; resetGame(); }
+        else if (gameState === 'playing') { bird.velocity = FLAP_STRENGTH; }
+        else if (gameState === 'gameOver') { gameState = 'ready'; resetGame(); message.innerText = 'Tap to Start'; }
     }
 
     canvas.addEventListener('mousedown', handleAction);
@@ -116,7 +77,7 @@
 
     function resetGame() {
         score = 0;
-        frameCount = 0;
+        spawnTimer = 0;
         pipes = [];
         bird.y = CANVAS_HEIGHT / 2;
         bird.velocity = 0;
@@ -124,56 +85,65 @@
         message.innerText = '';
     }
 
-    function saveHighScore() {
-        if (score > highScore) {
-            highScore = score;
-            localStorage.setItem('orbanGameHighScore', highScore);
-            highScoreLabel.innerText = `Best: ${highScore}`;
-        }
-    }
-
     function spawnPipe() {
-        const minPipeHeight = 50;
-        const maxPipeHeight = CANVAS_HEIGHT - PIPE_GAP - 100;
-        const topHeight = Math.floor(Math.random() * (maxPipeHeight - minPipeHeight + 1)) + minPipeHeight;
-        
-        pipes.push({
-            x: CANVAS_WIDTH,
-            topHeight: topHeight,
-            bottomY: topHeight + PIPE_GAP,
-            passed: false
-        });
+        const minH = 50, maxH = CANVAS_HEIGHT - PIPE_GAP - 100;
+        const topHeight = Math.floor(Math.random() * (maxH - minH + 1)) + minH;
+        pipes.push({ x: CANVAS_WIDTH, topHeight: topHeight, bottomY: topHeight + PIPE_GAP, passed: false });
     }
 
     function checkCollision(p, pipe) {
-        // Hitbox slightly smaller than image for "fairness"
-        const bX = p.x - BIRD_SIZE + 10;
-        const bY = p.y - BIRD_SIZE + 10;
-        const bW = (BIRD_SIZE * 2) - 20;
-        const bH = (BIRD_SIZE * 2) - 20;
+        const bX = p.x - BIRD_SIZE + HITBOX_PADDING;
+        const bRight = p.x + BIRD_SIZE - HITBOX_PADDING;
+        const bTop = p.y - BIRD_SIZE + HITBOX_PADDING;
+        const bBottom = p.y + BIRD_SIZE - HITBOX_PADDING;
 
-        if (p.x + BIRD_SIZE > pipe.x && p.x - BIRD_SIZE < pipe.x + PIPE_WIDTH) {
-            if (p.y - BIRD_SIZE < pipe.topHeight || p.y + BIRD_SIZE > pipe.bottomY) return true;
+        if (bRight > pipe.x && bX < pipe.x + PIPE_WIDTH) {
+            if (bTop < pipe.topHeight || bBottom > pipe.bottomY) return true;
         }
         return false;
     }
 
-    function update() {
-        if (gameState === 'playing') {
-            frameCount++;
-            bird.velocity += GRAVITY;
-            bird.y += bird.velocity;
-            bird.rotation = Math.min(Math.PI / 4, Math.max(-Math.PI / 4, bird.velocity * 0.1));
+    // --- The Main Loop with Delta Time ---
+    function gameLoop(timestamp) {
+        // Calculate Delta Time (dt)
+        // We normalize it so 1.0 = 60fps.
+        if (!lastTime) lastTime = timestamp;
+        let dt = (timestamp - lastTime) / (1000 / 60); 
+        lastTime = timestamp;
 
-            if (frameCount % PIPE_FREQUENCY === 0) spawnPipe();
+        // Caps dt to prevent huge jumps if the tab is backgrounded
+        if (dt > 2) dt = 2; 
+
+        update(dt);
+        draw();
+        requestAnimationFrame(gameLoop);
+    }
+
+    function update(dt) {
+        if (gameState === 'playing') {
+            // Scale physics by dt
+            bird.velocity += GRAVITY * dt;
+            bird.y += bird.velocity * dt;
+            bird.rotation = Math.min(Math.PI/4, Math.max(-Math.PI/4, bird.velocity * 0.1));
+
+            // Time-based pipe spawning
+            spawnTimer += (dt * 16.67); // Convert dt back to ms
+            if (spawnTimer >= PIPE_SPAWN_TIME) {
+                spawnPipe();
+                spawnTimer = 0;
+            }
 
             for (let i = pipes.length - 1; i >= 0; i--) {
-                pipes[i].x -= PIPE_SPEED;
+                pipes[i].x -= PIPE_SPEED * dt;
 
                 if (checkCollision(bird, pipes[i])) {
                     gameState = 'gameOver';
-                    saveHighScore();
-                    message.innerText = 'Ouch! Tap to Retry';
+                    if (score > highScore) {
+                        highScore = score;
+                        localStorage.setItem('orbanGameHighScore', highScore);
+                        highScoreLabel.innerText = `Best: ${highScore}`;
+                    }
+                    message.innerText = 'Game Over';
                 }
 
                 if (!pipes[i].passed && pipes[i].x + PIPE_WIDTH < bird.x) {
@@ -181,66 +151,42 @@
                     scoreLabel.innerText = score;
                     pipes[i].passed = true;
                 }
-
                 if (pipes[i].x + PIPE_WIDTH < 0) pipes.splice(i, 1);
             }
 
             if (bird.y + BIRD_SIZE > CANVAS_HEIGHT || bird.y - BIRD_SIZE < 0) {
                 gameState = 'gameOver';
-                saveHighScore();
-                message.innerText = 'Gone Too Far! Tap to Retry';
+                message.innerText = 'Game Over';
             }
         }
     }
 
     function draw() {
-        // Clear background
         ctx.fillStyle = '#70c5ce';
         ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-        // Draw Pipes (Hungarian Flag Theme)
         pipes.forEach(pipe => {
-            // Top Pipe (Red top, white bottom)
-            ctx.fillStyle = '#ce2939'; // Red
-            ctx.fillRect(pipe.x, 0, PIPE_WIDTH, pipe.topHeight - 20);
-            ctx.fillStyle = '#ffffff'; // White
-            ctx.fillRect(pipe.x, pipe.topHeight - 20, PIPE_WIDTH, 20);
-            
-            // Bottom Pipe (White top, Green bottom)
-            ctx.fillStyle = '#ffffff'; // White
-            ctx.fillRect(pipe.x, pipe.bottomY, PIPE_WIDTH, 20);
-            ctx.fillStyle = '#477050'; // Green
-            ctx.fillRect(pipe.x, pipe.bottomY + 20, PIPE_WIDTH, CANVAS_HEIGHT - pipe.bottomY);
-            
-            // Outline for pipes
-            ctx.strokeStyle = '#333';
-            ctx.lineWidth = 2;
+            ctx.fillStyle = '#ce2939'; ctx.fillRect(pipe.x, 0, PIPE_WIDTH, pipe.topHeight - 10);
+            ctx.fillStyle = '#ffffff'; ctx.fillRect(pipe.x, pipe.topHeight - 10, PIPE_WIDTH, 10);
+            ctx.fillStyle = '#ffffff'; ctx.fillRect(pipe.x, pipe.bottomY, PIPE_WIDTH, 10);
+            ctx.fillStyle = '#477050'; ctx.fillRect(pipe.x, pipe.bottomY + 10, PIPE_WIDTH, CANVAS_HEIGHT - pipe.bottomY);
+            ctx.strokeStyle = '#333'; ctx.lineWidth = 2;
             ctx.strokeRect(pipe.x, 0, PIPE_WIDTH, pipe.topHeight);
             ctx.strokeRect(pipe.x, pipe.bottomY, PIPE_WIDTH, CANVAS_HEIGHT - pipe.bottomY);
         });
 
-        // Draw Avatar
         ctx.save();
         ctx.translate(bird.x, bird.y);
         ctx.rotate(bird.rotation);
-
         if (imgLoaded) {
             ctx.drawImage(birdImg, -BIRD_SIZE, -BIRD_SIZE, BIRD_SIZE * 2, BIRD_SIZE * 2);
         } else {
-            // Fallback if image missing
-            ctx.font = '40px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText('🇭🇺', 0, 15);
+            ctx.font = '40px Arial'; ctx.textAlign = 'center'; ctx.fillText('🇭🇺', 0, 15);
         }
         ctx.restore();
-
-        requestAnimationFrame(() => {
-            update();
-            draw();
-        });
     }
 
-    draw();
+    requestAnimationFrame(gameLoop);
 </script>
 </body>
 </html>

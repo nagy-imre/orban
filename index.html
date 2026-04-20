@@ -3,15 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>The Great Escape - Sound Update</title>
+    <title>The Great Escape - Satire Edition</title>
     <style>
         body { margin: 0; padding: 0; overflow: hidden; background: #5cacee; font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; touch-action: manipulation; }
         #gameCanvas { max-width: 100%; max-height: 100vh; box-shadow: 0px 0px 50px rgba(0,0,0,0.6); background-color: #5cacee; border: 4px solid #333; }
-        #ui { position: absolute; top: 5%; width: 100%; color: white; text-align: center; user-select: none; pointer-events: none; text-shadow: 3px 3px 10px rgba(0,0,0,1); }
+        #ui { position: absolute; top: 5%; width: 100%; color: white; text-align: center; user-select: none; pointer-events: none; text-shadow: 3px 3px 10px rgba(0,0,0,1); z-index: 20; }
         #scoreLabel { font-size: 80px; margin: 0; font-weight: 900; }
         #highScoreLabel { font-size: 20px; margin: 0; text-transform: uppercase; letter-spacing: 2px; opacity: 0.8;}
         #message { font-size: 26px; margin-top: 10px; background: rgba(0,0,0,0.4); padding: 10px 20px; border-radius: 15px; }
-        #eventMessage { position: absolute; bottom: 15%; width: 100%; color: #ffeb3b; font-size: 32px; text-align: center; font-weight: bold; text-shadow: 2px 2px 4px #000; display: none; z-index: 10; }
+        #eventMessage { position: absolute; bottom: 20%; width: 100%; color: #ffeb3b; font-size: 32px; text-align: center; font-weight: bold; text-shadow: 2px 2px 4px #000; display: none; z-index: 10; }
     </style>
 </head>
 <body>
@@ -19,27 +19,21 @@
     <div id="ui">
         <p id="highScoreLabel">Best: 0</p>
         <h1 id="scoreLabel">0</h1>
-        <p id="message">Tap to Start</p>
+        <p id="message">Kattints a harchoz!</p>
     </div>
-    <div id="eventMessage">NINCS HOVA HÁTRÁLNUNK!</div>
+    <div id="eventMessage">MI VAGYUNK A TISZA!</div>
 
 <script>
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
-    const ui = {
-        score: document.getElementById('scoreLabel'),
-        high: document.getElementById('highScoreLabel'),
-        msg: document.getElementById('message'),
-        event: document.getElementById('eventMessage')
-    };
+    const ui = { score: document.getElementById('scoreLabel'), high: document.getElementById('highScoreLabel'), msg: document.getElementById('message'), event: document.getElementById('eventMessage') };
 
     const CANVAS_WIDTH = 360, CANVAS_HEIGHT = 640;
     const BIRD_SIZE = 55, HITBOX_PADDING = 15;
     const GRAVITY = 0.45, FLAP_STRENGTH = -8;
     const PIPE_WIDTH = 75, PIPE_SPEED = 3.5, PIPE_SPAWN_TIME = 1600;
 
-    canvas.width = CANVAS_WIDTH;
-    canvas.height = CANVAS_HEIGHT;
+    canvas.width = CANVAS_WIDTH; canvas.height = CANVAS_HEIGHT;
 
     // --- Audio System ---
     const sfx = {
@@ -49,30 +43,23 @@
         war: new Audio('the-problem-is-the-war.mp3')
     };
 
-    function playSfx(clip) {
-        clip.currentTime = 0;
-        clip.play().catch(e => console.log("Audio blocked by browser"));
-    }
+    function playSfx(clip) { clip.currentTime = 0; clip.play().catch(e => {}); }
 
-    // --- Asset Loading ---
-    const assets = {
-        ready: false, total: 3, loaded: 0,
-        imgs: { avatar: new Image(), peter: new Image(), lorinc: new Image() }
-    };
+    // --- Assets ---
+    const assets = { ready: false, total: 3, loaded: 0, imgs: { avatar: new Image(), peter: new Image(), lorinc: new Image() } };
     function loadHandler() { assets.loaded++; if (assets.loaded === assets.total) assets.ready = true; }
-    assets.imgs.avatar.src = 'avatar.png';
-    assets.imgs.peter.src = 'peter.png';
-    assets.imgs.lorinc.src = 'lorinc.png';
+    assets.imgs.avatar.src = 'avatar.png'; assets.imgs.peter.src = 'peter.png'; assets.imgs.lorinc.src = 'lorinc.png';
     Object.values(assets.imgs).forEach(img => img.onload = loadHandler);
 
-    // --- Game State ---
+    // --- Game Variables ---
     let gameState = 'ready', score = 0, pipes = [], lastTime = 0, spawnTimer = 0;
     let bird = { x: 80, y: CANVAS_HEIGHT / 2, velocity: 0, rotation: 0 };
     let highScore = localStorage.getItem('orbanGameHighScore') || 0;
     ui.high.innerText = `Best: ${highScore}`;
 
-    let boss = { active: false, x: 0, y: 0, speed: 4 };
+    let boss = { active: false, x: 500, y: 300, targetY: 300, timer: 0 };
     let lorincObstacles = [];
+    let particles = [];
 
     function handleAction(e) {
         if (e) e.preventDefault(); 
@@ -80,44 +67,27 @@
         if (gameState === 'ready') { gameState = 'playing'; resetGame(); }
         else if (gameState === 'playing') { 
             bird.velocity = FLAP_STRENGTH;
-            // Play "Is there any question" randomly on 5% of clicks
             if (Math.random() < 0.05) playSfx(sfx.question);
         }
-        else if (gameState === 'gameOver') { gameState = 'ready'; resetGame(); ui.msg.innerText = 'Tap to Start'; }
+        else if (gameState === 'gameOver') { gameState = 'ready'; resetGame(); ui.msg.innerText = 'Próbáld újra!'; }
     }
     canvas.addEventListener('mousedown', handleAction);
     canvas.addEventListener('touchstart', handleAction, { passive: false });
 
     function resetGame() {
-        score = 0; pipes = []; lorincObstacles = [];
+        score = 0; pipes = []; lorincObstacles = []; particles = [];
         bird.y = CANVAS_HEIGHT / 2; bird.velocity = 0;
-        boss.active = false; spawnTimer = 0;
-        ui.score.innerText = '0'; ui.msg.innerText = '';
-        ui.event.style.display = 'none';
-    }
-
-    function triggerBoss() {
-        boss.active = true;
-        boss.x = CANVAS_WIDTH + 100;
-        boss.y = bird.y;
-        playSfx(sfx.peter);
-        ui.event.innerText = "MI VAGYUNK A TISZA!";
-        ui.event.style.display = 'block';
-        setTimeout(() => { ui.event.style.display = 'none'; }, 2500);
+        boss.active = false; boss.x = 500; spawnTimer = 0;
+        ui.score.innerText = '0'; ui.msg.innerText = ''; ui.event.style.display = 'none';
     }
 
     function spawnLorinc() {
-        lorincObstacles.push({ x: CANVAS_WIDTH, y: Math.random() * (CANVAS_HEIGHT - 100) + 50, size: 60, speed: 5 });
+        lorincObstacles.push({ x: CANVAS_WIDTH + 50, y: Math.random() * (CANVAS_HEIGHT - 100) + 50, collected: false });
         playSfx(sfx.lorinc);
     }
 
-    function gameLoop(ts) {
-        let dt = (ts - lastTime) / (1000 / 60);
-        lastTime = ts;
-        if (dt > 2 || isNaN(dt)) dt = 1;
-        update(dt);
-        draw();
-        requestAnimationFrame(gameLoop);
+    function createExplosion(x, y) {
+        for(let i=0; i<10; i++) particles.push({ x, y, vx: (Math.random()-0.5)*10, vy: (Math.random()-0.5)*10, life: 1.0 });
     }
 
     function update(dt) {
@@ -129,36 +99,48 @@
 
         spawnTimer += dt * 16.67;
         if (spawnTimer >= PIPE_SPAWN_TIME) {
-            const gap = 200, maxH = CANVAS_HEIGHT - gap - 100;
-            const topH = Math.floor(Math.random() * (maxH - 50)) + 50;
+            const gap = 200, topH = Math.floor(Math.random() * (CANVAS_HEIGHT - gap - 150)) + 50;
             pipes.push({ x: CANVAS_WIDTH, topHeight: topH, bottomY: topH + gap, passed: false });
             spawnTimer = 0;
         }
 
-        if (score > 0 && score % 10 === 0 && !boss.active) triggerBoss();
+        // BOSS FIGHT LOGIC (Magyar Péter)
+        if (score > 0 && score % 10 === 0 && !boss.active) {
+            boss.active = true; boss.x = CANVAS_WIDTH + 50; playSfx(sfx.peter);
+            ui.event.style.display = 'block'; setTimeout(()=> ui.event.style.display='none', 2000);
+        }
+
         if (boss.active) {
-            boss.x -= boss.speed * dt;
-            boss.y += Math.sin(lastTime / 200) * 3;
-            if (boss.x < -100) boss.active = false;
+            boss.x = Math.max(220, boss.x - 2 * dt); // Moves to the right side and stays
+            boss.y += (bird.y - boss.y) * 0.05 * dt; // He "follows" Orban's height to block him
             if (Math.hypot(bird.x - boss.x, bird.y - boss.y) < 60) endGame();
+            if (score % 10 !== 0) boss.active = false; // Boss leaves after you score enough
         }
 
-        if (score > 0 && score % 7 === 0 && Math.random() < 0.015) spawnLorinc();
+        // LŐRINC LOGIC (Bonus, not deadly)
+        if (Math.random() < 0.005) spawnLorinc();
         for (let i = lorincObstacles.length - 1; i >= 0; i--) {
-            lorincObstacles[i].x -= lorincObstacles[i].speed * dt;
-            if (Math.hypot(bird.x - lorincObstacles[i].x, bird.y - lorincObstacles[i].y) < 50) endGame();
-            if (lorincObstacles[i].x < -100) lorincObstacles.splice(i, 1);
+            let o = lorincObstacles[i];
+            o.x -= 4 * dt;
+            if (!o.collected && Math.hypot(bird.x - o.x, bird.y - o.y) < 50) {
+                o.collected = true; score += 5; ui.score.innerText = score;
+                createExplosion(o.x, o.y); // Funny money explosion
+            }
+            if (o.x < -100 || o.collected) lorincObstacles.splice(i, 1);
         }
 
-        for (let i = pipes.length - 1; i >= 0; i--) {
-            pipes[i].x -= PIPE_SPEED * dt;
-            const p = pipes[i];
-            if (bird.x + BIRD_SIZE - 15 > p.x && bird.x - BIRD_SIZE + 15 < p.x + PIPE_WIDTH) {
-                if (bird.y - BIRD_SIZE + 15 < p.topHeight || bird.y + BIRD_SIZE - 15 > p.bottomY) endGame();
+        // Particles update
+        particles.forEach((p, i) => { p.x += p.vx; p.y += p.vy; p.life -= 0.02; if(p.life <= 0) particles.splice(i,1); });
+
+        // Pipe Collision
+        pipes.forEach((p, i) => {
+            p.x -= PIPE_SPEED * dt;
+            if (bird.x + 40 > p.x && bird.x - 40 < p.x + PIPE_WIDTH) {
+                if (bird.y - 40 < p.topHeight || bird.y + 40 > p.bottomY) endGame();
             }
             if (!p.passed && p.x + PIPE_WIDTH < bird.x) { score++; ui.score.innerText = score; p.passed = true; }
-            if (p.x + PIPE_WIDTH < 0) pipes.splice(i, 1);
-        }
+            if (p.x < -PIPE_WIDTH) pipes.splice(i, 1);
+        });
 
         if (bird.y + BIRD_SIZE > CANVAS_HEIGHT || bird.y - BIRD_SIZE < 0) endGame();
     }
@@ -166,15 +148,13 @@
     function draw() {
         ctx.fillStyle = '#5cacee'; ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
         pipes.forEach(p => {
-            ctx.fillStyle = '#ce2939'; ctx.fillRect(p.x, 0, PIPE_WIDTH, p.topHeight - 10);
-            ctx.fillStyle = '#ffffff'; ctx.fillRect(p.x, p.topHeight - 10, PIPE_WIDTH, 10);
-            ctx.fillStyle = '#ffffff'; ctx.fillRect(p.x, p.bottomY, PIPE_WIDTH, 10);
-            ctx.fillStyle = '#477050'; ctx.fillRect(p.x, p.bottomY + 10, PIPE_WIDTH, CANVAS_HEIGHT - p.bottomY);
-            ctx.strokeStyle = '#222'; ctx.strokeRect(p.x, 0, PIPE_WIDTH, p.topHeight);
-            ctx.strokeRect(p.x, p.bottomY, PIPE_WIDTH, CANVAS_HEIGHT - p.bottomY);
+            ctx.fillStyle = '#ce2939'; ctx.fillRect(p.x, 0, PIPE_WIDTH, p.topHeight);
+            ctx.fillStyle = '#477050'; ctx.fillRect(p.x, p.bottomY, PIPE_WIDTH, CANVAS_HEIGHT - p.bottomY);
+            ctx.strokeStyle = '#fff'; ctx.strokeRect(p.x, 0, PIPE_WIDTH, p.topHeight); ctx.strokeRect(p.x, p.bottomY, PIPE_WIDTH, CANVAS_HEIGHT - p.bottomY);
         });
-        lorincObstacles.forEach(o => { ctx.drawImage(assets.imgs.lorinc, o.x - 30, o.y - 30, 60, 60); });
-        if (boss.active) ctx.drawImage(assets.imgs.peter, boss.x - 60, boss.y - 60, 120, 120);
+        lorincObstacles.forEach(o => ctx.drawImage(assets.imgs.lorinc, o.x - 40, o.y - 40, 80, 80));
+        particles.forEach(p => { ctx.fillStyle = `rgba(255, 215, 0, ${p.life})`; ctx.fillText('€', p.x, p.y); });
+        if (boss.active) ctx.drawImage(assets.imgs.peter, boss.x - 70, boss.y - 70, 140, 140);
         ctx.save(); ctx.translate(bird.x, bird.y); ctx.rotate(bird.rotation);
         if (assets.ready) ctx.drawImage(assets.imgs.avatar, -BIRD_SIZE, -BIRD_SIZE, BIRD_SIZE*2, BIRD_SIZE*2);
         ctx.restore();
@@ -186,7 +166,8 @@
         if (score > highScore) { highScore = score; localStorage.setItem('orbanGameHighScore', highScore); ui.high.innerText = `Best: ${highScore}`; }
         ui.msg.innerText = 'BRÜSSZEL MEGÁLLÍTOTT!';
     }
-    requestAnimationFrame(gameLoop);
+    function loop(ts) { let dt = (ts - lastTime) / 16.67; lastTime = ts; update(dt || 1); draw(); requestAnimationFrame(loop); }
+    requestAnimationFrame(loop);
 </script>
 </body>
 </html>

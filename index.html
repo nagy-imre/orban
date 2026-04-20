@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>The Great Escape - Full Satire Edition</title>
+    <title>The Great Escape - Propaganda Edition</title>
     <style>
         body { 
             margin: 0; padding: 0; overflow: hidden; background: #1a1a1a; 
@@ -23,7 +23,7 @@
         }
         #scoreLabel { font-size: clamp(40px, 10vh, 80px); margin: 0; font-weight: 900; }
         #highScoreLabel { font-size: 18px; margin: 0; text-transform: uppercase; opacity: 0.8; }
-        #message { font-size: 24px; margin-top: 15px; padding: 10px; border-radius: 10px; }
+        #message { font-size: 24px; margin-top: 15px; padding: 10px; border-radius: 10px; line-height: 1.4; }
         #eventMessage { 
             position: absolute; bottom: 20%; width: 100%; color: #ffeb3b; 
             font-size: 28px; text-align: center; font-weight: bold; 
@@ -36,7 +36,7 @@
     <div id="ui">
         <p id="highScoreLabel">Legjobb: 0</p>
         <h1 id="scoreLabel">0</h1>
-        <div id="message">Kattints vagy Szóköz a harchoz!</div>
+        <div id="message">Kattints a harchoz!</div>
     </div>
     <div id="eventMessage"></div>
 
@@ -56,6 +56,25 @@
     // --- GAME CONSTANTS ---
     const GRAVITY = 0.45, FLAP = -8, PIPE_W = 75, PIPE_SPEED = 3.5, PIPE_SPAWN_MS = 1700;
 
+    // --- PROPAGANDA STRINGS ---
+    const gameOverTexts = [
+        "BRÜSSZEL MEGÁLLÍTOTT!",
+        "POLOSKA PÉTER ELKAPOTT!",
+        "ELVETTÉK A REZSIUTALVÁNYT!",
+        "ELFOGYOTT A HATÓSÁGI ÁRAS FAR-HÁT!",
+        "SOROS GYÖRGY NEVET A VÉGÉN!",
+        "DOLLÁRBALOLDAL ÁLDOZATA LETTÉL!",
+        "MEGÉRKEZETT A GURULÓ DOLLÁR!"
+    ];
+
+    const shieldTexts = [
+        "MEGÉRKEZETT AZ UNIÓS PÉNZ!",
+        "BRÜSSZELI TÁMOGATÁS AKTIVÁLVA!",
+        "SOROS-TERV KICSELEZVE!",
+        "MEGVÉDTÜK A REZSIKÖLTSÉGEKET!",
+        "EXTRA PROFIT ADÓ BEHAJTVA!"
+    ];
+
     // --- AUDIO SYSTEM ---
     const sfx = {
         peter: new Audio('mi-vagyunk-magyar-peter.mp3'),
@@ -65,31 +84,14 @@
         money: new Audio('money.mp3')
     };
 
-    function playSfx(clip) { 
-        clip.currentTime = 0; 
-        clip.play().catch(() => {}); 
-    }
-    
-    function stopAllSfx() { 
-        Object.values(sfx).forEach(s => { s.pause(); s.currentTime = 0; }); 
-    }
+    function playSfx(clip) { clip.currentTime = 0; clip.play().catch(() => {}); }
+    function stopSfx(clip) { clip.pause(); clip.currentTime = 0; }
+    function stopAllSfx() { Object.values(sfx).forEach(s => { s.pause(); s.currentTime = 0; }); }
 
     // --- ASSET LOADING ---
-    const assets = { 
-        ready: false, total: 4, loaded: 0, 
-        imgs: { avatar: new Image(), peter: new Image(), lorinc: new Image(), eu: new Image() } 
-    };
-    
-    function loadHandler() { 
-        assets.loaded++; 
-        if (assets.loaded === assets.total) assets.ready = true; 
-    }
-    
-    assets.imgs.avatar.src = 'avatar.png'; 
-    assets.imgs.peter.src = 'peter.png'; 
-    assets.imgs.lorinc.src = 'lorinc.png'; 
-    assets.imgs.eu.src = 'eu.png';
-    
+    const assets = { ready: false, total: 4, loaded: 0, imgs: { avatar: new Image(), peter: new Image(), lorinc: new Image(), eu: new Image() } };
+    function loadHandler() { assets.loaded++; if (assets.loaded === assets.total) assets.ready = true; }
+    assets.imgs.avatar.src = 'avatar.png'; assets.imgs.peter.src = 'peter.png'; assets.imgs.lorinc.src = 'lorinc.png'; assets.imgs.eu.src = 'eu.png';
     Object.values(assets.imgs).forEach(img => img.onload = loadHandler);
 
     // --- GAME STATE ---
@@ -108,7 +110,6 @@
         setTimeout(() => ui.event.style.display = 'none', 2500);
     }
 
-    // --- INPUT HANDLING ---
     function doAction() {
         if (!assets.ready) return;
         if (state === 'ready') { state = 'playing'; resetGame(); }
@@ -131,7 +132,6 @@
         stopAllSfx();
     }
 
-    // --- MAIN UPDATE LOOP ---
     function update(dt) {
         if (!assets.ready || state !== 'playing') return;
 
@@ -145,30 +145,27 @@
             const gap = 220, topH = Math.floor(Math.random() * (CH - gap - 160)) + 60;
             pipes.push({ x: CW, topH: topH, botY: topH + gap, passed: false });
             spawnTimer = 0;
-
             let roll = Math.random();
-            if (roll < 0.08) {
-                lorincItems.push({ x: CW + 50, y: Math.random() * (CH - 150) + 75, done: false });
-                playSfx(sfx.lorinc);
-            }
+            if (roll < 0.08) { lorincItems.push({ x: CW + 50, y: Math.random() * (CH - 150) + 75, done: false }); playSfx(sfx.lorinc); }
             else if (roll > 0.90) euItems.push({ x: CW + 50, y: Math.random() * (CH - 150) + 75, done: false });
         }
 
-        // BOSS LOGIC (Trigger every 20 points)
         if (score > 0 && score % 20 === 0 && score !== boss.lastScore) {
             boss.lastScore = score;
             boss.active = true; boss.x = CW + 60; boss.y = bird.y;
             playSfx(sfx.peter);
-            showEvent("MI VAGYUNK A TISZA!", "#ffeb3b");
+            showEvent("POLOSKA PÉTER TÁMAD!", "#ffeb3b");
         }
         if (boss.active) {
             boss.x -= 4.5 * dt;
             boss.y += Math.sin(Date.now() / 150) * 3;
             if (bird.iFrames <= 0 && Math.hypot(bird.x - boss.x, bird.y - boss.y) < 60) triggerHit();
-            if (boss.x < -150) boss.active = false; 
+            if (boss.x < -150) { 
+                boss.active = false; 
+                stopSfx(sfx.peter); // STOPS MUSIC WHEN OUT OF SCREEN
+            } 
         }
 
-        // LORINC COLLECTION
         lorincItems.forEach((o, i) => {
             o.x -= 4 * dt;
             if (!o.done && Math.hypot(bird.x - o.x, bird.y - o.y) < 50) {
@@ -179,22 +176,20 @@
             if (o.x < -60 || o.done) lorincItems.splice(i, 1);
         });
 
-        // EU SHIELD COLLECTION
         euItems.forEach((e, i) => {
             e.x -= PIPE_SPEED * dt;
             if (!e.done && Math.hypot(bird.x - e.x, bird.y - e.y) < 40) {
                 e.done = true; bird.shielded = true;
-                showEvent("BRÜSSZELI PÉNZ MEGÉRKEZETT!", "#003399");
+                playSfx(sfx.money); // MONEY SOUND ON SHIELD
+                showEvent(shieldTexts[Math.floor(Math.random() * shieldTexts.length)], "#003399");
             }
             if (e.x < -60 || e.done) euItems.splice(i, 1);
         });
 
         particles.forEach((p, i) => { p.x += p.vx; p.y += p.vy; p.l -= 0.03; if(p.l <= 0) particles.splice(i,1); });
 
-        // COLLISION DETECTION (Aspect Ratio Aware)
         const ratio = assets.imgs.avatar.naturalWidth / assets.imgs.avatar.naturalHeight;
         const hitBoxH = 45, hitBoxW = hitBoxH * ratio;
-
         pipes.forEach((p, i) => {
             p.x -= PIPE_SPEED * dt;
             if (bird.x + hitBoxW > p.x && bird.x - hitBoxW < p.x + PIPE_W) {
@@ -203,7 +198,6 @@
             if (!p.passed && p.x + PIPE_W < bird.x) { score++; ui.score.innerText = score; p.passed = true; }
             if (p.x < -PIPE_W) pipes.splice(i, 1);
         });
-
         if (bird.y + 40 > CH || bird.y - 40 < 0) triggerHit();
     }
 
@@ -211,16 +205,11 @@
         if (bird.shielded) {
             bird.shielded = false; bird.iFrames = 60;
             showEvent("A PAJZS BETÖRT!", "#ffeb3b");
-        } else if (bird.iFrames <= 0) {
-            endGame();
-        }
+        } else if (bird.iFrames <= 0) { endGame(); }
     }
 
-    // --- DRAWING ---
     function draw() {
         ctx.fillStyle = '#5cacee'; ctx.fillRect(0, 0, CW, CH);
-
-        // 3D PIPES
         pipes.forEach(p => {
             let pGrad = ctx.createLinearGradient(p.x, 0, p.x + PIPE_W, 0);
             pGrad.addColorStop(0, 'rgba(0,0,0,0.5)'); pGrad.addColorStop(0.3, 'rgba(255,255,255,0.3)'); pGrad.addColorStop(1, 'rgba(0,0,0,0.6)');
@@ -232,23 +221,15 @@
             draw3DRect(p.x, 0, PIPE_W, p.topH, '#ce2939'); draw3DRect(p.x - 4, p.topH - 20, PIPE_W + 8, 20, '#ffffff');
             draw3DRect(p.x, p.botY, PIPE_W, CH - p.botY, '#477050'); draw3DRect(p.x - 4, p.botY, PIPE_W + 8, 20, '#ffffff');
         });
-
         lorincItems.forEach(o => ctx.drawImage(assets.imgs.lorinc, o.x - 40, o.y - 40, 80, 80));
         euItems.forEach(e => ctx.drawImage(assets.imgs.eu, e.x - 30, e.y - 30, 60, 60));
-        
         ctx.font = "bold 24px Arial";
         particles.forEach(p => { ctx.fillStyle = `rgba(255,215,0,${p.l})`; ctx.fillText('€', p.x, p.y); });
-        
         if (boss.active) ctx.drawImage(assets.imgs.peter, boss.x - 70, boss.y - 70, 140, 140);
-
-        // AVATAR WITH ASPECT RATIO FIX
-        ctx.save(); 
-        ctx.translate(bird.x, bird.y); 
-        ctx.rotate(bird.rot);
+        ctx.save(); ctx.translate(bird.x, bird.y); ctx.rotate(bird.rot);
         if (assets.ready) {
             let img = assets.imgs.avatar;
             let drawH = 110, drawW = drawH * (img.naturalWidth / img.naturalHeight);
-
             if (bird.shielded) {
                 ctx.shadowColor = '#ffff00'; ctx.shadowBlur = 20;
                 ctx.beginPath(); ctx.arc(0, 0, Math.max(drawW, drawH)/1.5, 0, Math.PI*2);
@@ -263,12 +244,8 @@
     function endGame() {
         if (state === 'playing') { stopAllSfx(); playSfx(sfx.war); }
         state = 'gameOver';
-        if (score > highScore) { 
-            highScore = score; 
-            localStorage.setItem('orbanGameHighScore', highScore); 
-            ui.high.innerText = `Legjobb: ${highScore}`; 
-        }
-        ui.msg.innerText = 'BRÜSSZEL MEGÁLLÍTOTT!';
+        if (score > highScore) { highScore = score; localStorage.setItem('orbanGameHighScore', highScore); ui.high.innerText = `Legjobb: ${highScore}`; }
+        ui.msg.innerText = gameOverTexts[Math.floor(Math.random() * gameOverTexts.length)];
         ui.msg.style.background = 'rgba(0,0,0,0.6)';
     }
 
